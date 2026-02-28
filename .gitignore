@@ -208,6 +208,5 @@ __marimo__/
 
 # Node
 node_modules/
-pnpm-lock.yaml
 docs/.vitepress/dist/
 docs/.vitepress/cache/
