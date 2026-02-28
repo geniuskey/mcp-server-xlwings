@@ -110,3 +110,57 @@ Agent calls `find_replace(find="2024", replace="2025")`.
 > "Create a new sheet called 'Q1 Report'"
 
 Agent calls `manage_sheets(action="add", new_name="Q1 Report")`.
+
+## Real-World Workflow: Financial Analysis
+
+> "Analyze this business feasibility spreadsheet and extract the key financial metrics"
+
+A complex Excel file with 5 sheets, merged headers, and formulas. Here's how the agent processes it step-by-step:
+
+**Step 1 — Discover structure:**
+
+```
+get_active_workbook()
+```
+
+Returns workbook name, 5 sheets with their dimensions and used ranges.
+
+**Step 2 — Batch overview:**
+
+```
+read_data(sheet="*")
+```
+
+Gets summaries of all 5 sheets in one call: headers, merged cells, regions.
+
+**Step 3 — Understand headers:**
+
+```
+read_data(sheet="Revenue", cell_range="A1:Z5", merge_info=true)
+```
+
+Reveals multi-level merged headers like "Building Plan" spanning rows 6-19.
+
+**Step 4 — Find calculations:**
+
+```
+get_formulas(sheet="Revenue", cell_range="A1:Z100", values_too=true)
+```
+
+Identifies all formula cells with their calculated values.
+
+**Step 5 — Identify sections by formatting:**
+
+```
+get_cell_styles(sheet="Revenue", cell_range="A1:A50", properties=["bold", "bg_color"])
+```
+
+Bold + colored background = section headers. Bold only = subtotals.
+
+**Step 6 — Extract target data:**
+
+```
+read_data(sheet="Revenue", cell_range="B6:U36", header_row=2)
+```
+
+Reads the specific data table with row 2 as headers.
