@@ -5,6 +5,9 @@ hero:
   name: mcp-server-xlwings
   text: Excel Automation for AI Agents
   tagline: MCP server that controls live Excel via COM. Works with DRM-protected files.
+  image:
+    src: /logo.svg
+    alt: mcp-server-xlwings
   actions:
     - theme: brand
       text: Get Started

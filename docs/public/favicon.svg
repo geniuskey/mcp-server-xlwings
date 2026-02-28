@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2EAA5F"/>
+      <stop offset="100%" stop-color="#1A7A3E"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="url(#bg)"/>
+  <!-- 3x3 grid -->
+  <rect x="24" y="24" width="80" height="80" rx="6" fill="none" stroke="#fff" stroke-width="4.5"/>
+  <line x1="51" y1="24" x2="51" y2="104" stroke="#fff" stroke-width="3" opacity=".7"/>
+  <line x1="77" y1="24" x2="77" y2="104" stroke="#fff" stroke-width="3" opacity=".7"/>
+  <line x1="24" y1="51" x2="104" y2="51" stroke="#fff" stroke-width="3" opacity=".7"/>
+  <line x1="24" y1="77" x2="104" y2="77" stroke="#fff" stroke-width="3" opacity=".7"/>
+  <!-- Wing accents -->
+  <path d="M16 48 Q4 64 16 80" stroke="#fff" stroke-width="3.5" fill="none" stroke-linecap="round" opacity=".6"/>
+  <path d="M112 48 Q124 64 112 80" stroke="#fff" stroke-width="3.5" fill="none" stroke-linecap="round" opacity=".6"/>
+</svg>

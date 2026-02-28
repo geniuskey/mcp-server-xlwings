@@ -6,6 +6,7 @@ export default defineConfig({
     "MCP server for Excel automation via xlwings COM. Works with DRM-protected files.",
   base: "/mcp-server-xlwings/",
   head: [
+    ["link", { rel: "icon", type: "image/svg+xml", href: "/mcp-server-xlwings/favicon.svg" }],
     [
       "meta",
       {
@@ -23,6 +24,7 @@ export default defineConfig({
     ],
   ],
   themeConfig: {
+    logo: "/logo.svg",
     nav: [
       { text: "Guide", link: "/guide/getting-started" },
       { text: "Tools", link: "/tools/" },
