@@ -45,6 +45,28 @@ def _to_2d(raw: Any) -> list[list[Any]]:
     return [_serialize_row(row) for row in raw]
 
 
+def _col_letter(col_num: int) -> str:
+    """Convert 1-based column number to Excel column letter(s)."""
+    result = ""
+    while col_num > 0:
+        col_num, remainder = divmod(col_num - 1, 26)
+        result = chr(65 + remainder) + result
+    return result
+
+
+def _ole_color_to_hex(color: Any) -> str | None:
+    """Convert OLE color (long) to hex string #RRGGBB."""
+    if color is None:
+        return None
+    color = int(color)
+    if color < 0:
+        return None
+    r = color & 0xFF
+    g = (color >> 8) & 0xFF
+    b = (color >> 16) & 0xFF
+    return f"#{r:02X}{g:02X}{b:02X}"
+
+
 class ExcelHandler:
     """Stateless wrapper around xlwings for Excel COM automation."""
 
@@ -239,8 +261,22 @@ class ExcelHandler:
         cell_range: str | None = None,
         headers: bool = True,
         detail: bool = False,
+        merge_info: bool = False,
+        header_row: int | None = None,
     ) -> dict:
         wb = self._get_workbook_or_active(workbook)
+
+        # Batch read all sheets
+        if sheet == "*":
+            sheets_data: dict[str, Any] = {}
+            for s in wb.sheets:
+                sheets_data[s.name] = self.read_data(
+                    workbook=wb.name, sheet=s.name,
+                    cell_range=cell_range, headers=headers, detail=detail,
+                    merge_info=merge_info, header_row=header_row,
+                )
+            return {"sheet_count": len(sheets_data), "sheets": sheets_data}
+
         ws = self._get_sheet(wb, sheet)
 
         # No range specified: return sheet summary without reading data
@@ -337,6 +373,27 @@ class ExcelHandler:
 
         data = _to_2d(raw)
 
+        # Fill merged cells with the merge area's first-cell value
+        merged_ranges_list: list[dict] = []
+        if merge_info:
+            merge_flag = rng.api.MergeCells
+            if merge_flag is not False:  # True or None (mixed)
+                visited: set[str] = set()
+                for i in range(rng.rows.count):
+                    for j in range(rng.columns.count):
+                        cell_api = rng[i, j].api
+                        if cell_api.MergeCells:
+                            ma = cell_api.MergeArea
+                            addr = ma.Address
+                            val = _serialize_value(ma.Cells(1, 1).Value)
+                            if addr not in visited:
+                                visited.add(addr)
+                                merged_ranges_list.append({
+                                    "range": addr,
+                                    "value": val,
+                                })
+                            data[i][j] = val
+
         result: dict[str, Any] = {
             "range": rng.address,
             "sheet": ws.name,
@@ -345,10 +402,17 @@ class ExcelHandler:
         }
 
         if headers and len(data) > 1:
-            result["headers"] = data[0]
-            result["data"] = data[1:]
+            hdr_idx = (header_row - 1) if header_row else 0
+            if 0 <= hdr_idx < len(data):
+                result["headers"] = data[hdr_idx]
+                result["data"] = data[hdr_idx + 1:]
+            else:
+                result["data"] = data
         else:
             result["data"] = data
+
+        if merged_ranges_list:
+            result["merged_ranges"] = merged_ranges_list
 
         if detail and rng.size == 1:
             raw_val = rng.value
@@ -710,4 +774,230 @@ class ExcelHandler:
         return {
             "message": f"Macro '{macro_name}' executed successfully.",
             "return_value": _serialize_value(result),
+        }
+
+    # ------------------------------------------------------------------ #
+    #  Tool 9: get_formulas
+    # ------------------------------------------------------------------ #
+
+    def get_formulas(
+        self,
+        cell_range: str,
+        workbook: str | None = None,
+        sheet: str | None = None,
+        values_too: bool = False,
+    ) -> dict:
+        wb = self._get_workbook_or_active(workbook)
+        ws = self._get_sheet(wb, sheet)
+        rng = ws.range(cell_range)
+
+        # Bulk read formulas and values
+        raw_formulas = rng.formula
+        raw_values = rng.value if values_too else None
+
+        # Normalise to 2D
+        if not isinstance(raw_formulas, list):
+            raw_formulas = [[raw_formulas]]
+        elif raw_formulas and not isinstance(raw_formulas[0], list):
+            raw_formulas = [raw_formulas]
+
+        if values_too:
+            if not isinstance(raw_values, list):
+                raw_values = [[raw_values]]
+            elif raw_values and not isinstance(raw_values[0], list):
+                raw_values = [raw_values]
+
+        base_row = rng.row
+        base_col = rng.column
+        formulas: list[dict] = []
+
+        for i, row in enumerate(raw_formulas):
+            for j, f in enumerate(row):
+                if isinstance(f, str) and f.startswith("="):
+                    addr = f"{_col_letter(base_col + j)}{base_row + i}"
+                    entry: dict[str, Any] = {"cell": addr, "formula": f}
+                    if values_too and raw_values:
+                        entry["value"] = _serialize_value(raw_values[i][j])
+                    formulas.append(entry)
+
+        return {
+            "formulas": formulas,
+            "total_formula_cells": len(formulas),
+            "range": rng.address,
+            "sheet": ws.name,
+        }
+
+    # ------------------------------------------------------------------ #
+    #  Tool 10: get_cell_styles
+    # ------------------------------------------------------------------ #
+
+    _ALIGN_REVERSE = {
+        -4131: "left",
+        -4108: "center",
+        -4152: "right",
+        -4130: "justify",
+        1: "general",
+    }
+
+    def get_cell_styles(
+        self,
+        cell_range: str,
+        workbook: str | None = None,
+        sheet: str | None = None,
+        properties: list[str] | None = None,
+    ) -> dict:
+        wb = self._get_workbook_or_active(workbook)
+        ws = self._get_sheet(wb, sheet)
+        rng = ws.range(cell_range)
+
+        total_cells = rng.rows.count * rng.columns.count
+        result: dict[str, Any] = {
+            "range": rng.address,
+            "sheet": ws.name,
+        }
+        if total_cells > 1000:
+            result["warning"] = (
+                f"Large range ({total_cells} cells). "
+                "Consider using 'properties' filter or a smaller range."
+            )
+
+        all_props = {
+            "bold", "italic", "underline", "font_name", "font_size",
+            "font_color", "bg_color", "number_format", "alignment", "border",
+        }
+        wanted = set(properties) & all_props if properties else all_props
+
+        styles: list[dict] = []
+        base_row = rng.row
+        base_col = rng.column
+
+        for i in range(rng.rows.count):
+            for j in range(rng.columns.count):
+                cell = rng[i, j]
+                cell_api = cell.api
+                if cell_api.Value is None and cell_api.Formula == "":
+                    continue
+
+                info: dict[str, Any] = {}
+                addr = f"{_col_letter(base_col + j)}{base_row + i}"
+
+                if "bold" in wanted:
+                    v = cell_api.Font.Bold
+                    if v:
+                        info["bold"] = True
+                if "italic" in wanted:
+                    v = cell_api.Font.Italic
+                    if v:
+                        info["italic"] = True
+                if "underline" in wanted:
+                    v = cell_api.Font.Underline
+                    if v and v != -4142:  # xlUnderlineStyleNone
+                        info["underline"] = True
+                if "font_name" in wanted:
+                    info["font_name"] = cell_api.Font.Name
+                if "font_size" in wanted:
+                    info["font_size"] = cell_api.Font.Size
+                if "font_color" in wanted:
+                    c = _ole_color_to_hex(cell_api.Font.Color)
+                    if c and c != "#000000":
+                        info["font_color"] = c
+                if "bg_color" in wanted:
+                    try:
+                        c = _ole_color_to_hex(cell_api.Interior.Color)
+                        if c and c != "#000000":
+                            info["bg_color"] = c
+                    except Exception:
+                        pass
+                if "number_format" in wanted:
+                    nf = cell_api.NumberFormat
+                    if nf and nf != "General":
+                        info["number_format"] = nf
+                if "alignment" in wanted:
+                    ha = cell_api.HorizontalAlignment
+                    label = self._ALIGN_REVERSE.get(ha)
+                    if label and label != "general":
+                        info["alignment"] = label
+                if "border" in wanted:
+                    has_border = False
+                    for edge in range(7, 13):
+                        try:
+                            if cell_api.Borders(edge).LineStyle == 1:
+                                has_border = True
+                                break
+                        except Exception:
+                            pass
+                    if has_border:
+                        info["border"] = True
+
+                if info:
+                    info["cell"] = addr
+                    styles.append(info)
+
+        result["styles"] = styles
+        return result
+
+    # ------------------------------------------------------------------ #
+    #  Tool 11: get_objects
+    # ------------------------------------------------------------------ #
+
+    def get_objects(
+        self,
+        workbook: str | None = None,
+        sheet: str | None = None,
+    ) -> dict:
+        wb = self._get_workbook_or_active(workbook)
+        ws = self._get_sheet(wb, sheet)
+
+        charts: list[dict] = []
+        try:
+            for co in ws.api.ChartObjects():
+                entry: dict[str, Any] = {
+                    "name": co.Name,
+                    "top_left_cell": co.TopLeftCell.Address,
+                    "width": co.Width,
+                    "height": co.Height,
+                }
+                try:
+                    entry["chart_type"] = str(co.Chart.ChartType)
+                    if co.Chart.HasTitle:
+                        entry["title"] = co.Chart.ChartTitle.Text
+                except Exception:
+                    pass
+                charts.append(entry)
+        except Exception:
+            pass
+
+        images: list[dict] = []
+        try:
+            for pic in ws.pictures:
+                images.append({
+                    "name": pic.name,
+                    "top_left_cell": pic.top_left_cell.address,
+                    "width": pic.width,
+                    "height": pic.height,
+                })
+        except Exception:
+            pass
+
+        shapes: list[dict] = []
+        try:
+            for shp in ws.api.Shapes:
+                # Skip charts (type 3) and pictures (type 13) already listed
+                if shp.Type in (3, 13):
+                    continue
+                shapes.append({
+                    "name": shp.Name,
+                    "type": shp.Type,
+                    "top_left_cell": shp.TopLeftCell.Address,
+                    "width": shp.Width,
+                    "height": shp.Height,
+                })
+        except Exception:
+            pass
+
+        return {
+            "sheet": ws.name,
+            "charts": charts,
+            "images": images,
+            "shapes": shapes,
         }

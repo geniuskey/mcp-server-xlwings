@@ -94,22 +94,28 @@ def read_data(
     cell_range: str | None = None,
     headers: bool = True,
     detail: bool = False,
+    merge_info: bool = False,
+    header_row: int | None = None,
 ) -> dict:
     """Read data from an Excel range.
     When cell_range is omitted, returns a sheet summary (used range address,
     total rows/columns, headers) WITHOUT reading all data -- call again with
     a specific cell_range to fetch the actual data.
     Set detail=True on a single cell to get formula, type, and formatting info.
+    Use sheet="*" to batch-read all sheets in one call.
 
     Args:
         workbook: Workbook name or path. Defaults to active workbook.
-        sheet: Sheet name. Defaults to active sheet.
+        sheet: Sheet name. Defaults to active sheet. Use '*' to read all sheets.
         cell_range: Range like 'A1:D10' or cell like 'B5'. Returns sheet summary if omitted.
         headers: Treat first row as column headers.
         detail: For single cells, include formula, type, number format, and font info.
+        merge_info: Fill merged cells with the merge area's value instead of null.
+        header_row: 1-based row number to use as headers (e.g. 3 means row 3 is headers).
     """
     return _call(
-        _handler.read_data, workbook, sheet, cell_range, headers, detail
+        _handler.read_data, workbook, sheet, cell_range, headers, detail,
+        merge_info, header_row,
     )
 
 
@@ -289,3 +295,91 @@ def run_macro(
         args: Optional arguments to pass to the macro.
     """
     return _call(_handler.run_macro, macro_name, workbook, args)
+
+
+# ================================================================== #
+#  Tool 9: get_formulas
+# ================================================================== #
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Get Formulas",
+        readOnlyHint=True,
+    ),
+)
+def get_formulas(
+    cell_range: str,
+    workbook: str | None = None,
+    sheet: str | None = None,
+    values_too: bool = False,
+) -> dict:
+    """Get all formulas in a range. Returns only cells that contain formulas.
+
+    Args:
+        cell_range: Range like 'A1:U99'.
+        workbook: Workbook name or path. Defaults to active workbook.
+        sheet: Sheet name. Defaults to active sheet.
+        values_too: Include calculated values alongside formulas.
+    """
+    return _call(
+        _handler.get_formulas, cell_range, workbook, sheet, values_too
+    )
+
+
+# ================================================================== #
+#  Tool 10: get_cell_styles
+# ================================================================== #
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Get Cell Styles",
+        readOnlyHint=True,
+    ),
+)
+def get_cell_styles(
+    cell_range: str,
+    workbook: str | None = None,
+    sheet: str | None = None,
+    properties: list[str] | None = None,
+) -> dict:
+    """Get formatting/style info for cells in a range.
+    Returns only cells with non-default styles. Useful for identifying
+    headers, subtotals, and data roles by visual formatting.
+
+    Args:
+        cell_range: Range like 'A1:D10'.
+        workbook: Workbook name or path. Defaults to active workbook.
+        sheet: Sheet name. Defaults to active sheet.
+        properties: Filter specific properties (bold, italic, underline,
+                    font_name, font_size, font_color, bg_color,
+                    number_format, alignment, border).
+    """
+    return _call(
+        _handler.get_cell_styles, cell_range, workbook, sheet, properties
+    )
+
+
+# ================================================================== #
+#  Tool 11: get_objects
+# ================================================================== #
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Get Objects",
+        readOnlyHint=True,
+    ),
+)
+def get_objects(
+    workbook: str | None = None,
+    sheet: str | None = None,
+) -> dict:
+    """List charts, images, and shapes on a sheet.
+
+    Args:
+        workbook: Workbook name or path. Defaults to active workbook.
+        sheet: Sheet name. Defaults to active sheet.
+    """
+    return _call(_handler.get_objects, workbook, sheet)

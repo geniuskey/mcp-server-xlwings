@@ -1,6 +1,6 @@
 [project]
 name = "mcp-server-xlwings"
-version = "0.3.1"
+version = "0.4.0"
 description = "MCP server for Excel automation via xlwings COM. Supports DRM-protected files."
 readme = "README.md"
 license = {text = "MIT"}
