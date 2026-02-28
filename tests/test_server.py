@@ -13,20 +13,34 @@ def test_import_server():
 
 
 def test_server_has_tools():
-    """Verify all 10 tools are registered."""
+    """Verify all 17 tools are registered."""
     from mcp_server_xlwings.server import mcp
 
     tool_names = {name for name in mcp._tool_manager._tools}
     expected = {
+        # Active Excel (xlwings-exclusive)
+        "get_active_workbook",
+        "read_selection",
+        "activate_sheet",
+        "run_macro",
+        "close_workbook",
+        "recalculate",
+        # Core workbook
         "list_open_workbooks",
         "open_workbook",
+        "save_workbook",
+        # Read / Write
         "read_range",
         "write_range",
         "read_cell_info",
         "set_formula",
-        "manage_sheets",
         "find_replace",
+        # Sheet & structure
+        "manage_sheets",
+        "insert_delete_cells",
+        # Formatting
         "format_range",
-        "save_workbook",
     }
-    assert expected == tool_names, f"Missing tools: {expected - tool_names}"
+    assert expected == tool_names, (
+        f"Missing: {expected - tool_names}, Extra: {tool_names - expected}"
+    )

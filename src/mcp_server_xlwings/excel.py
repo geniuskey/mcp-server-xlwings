@@ -384,10 +384,14 @@ class ExcelHandler:
         sheet: str | None,
         cell_range: str,
         bold: bool | None = None,
+        italic: bool | None = None,
+        underline: bool | None = None,
         font_size: int | None = None,
         font_color: str | None = None,
         bg_color: str | None = None,
         number_format: str | None = None,
+        alignment: str | None = None,
+        wrap_text: bool | None = None,
         border: bool | None = None,
     ) -> dict:
         wb = self._get_workbook(workbook)
@@ -399,6 +403,15 @@ class ExcelHandler:
         if bold is not None:
             rng.font.bold = bold
             applied.append(f"bold={bold}")
+
+        if italic is not None:
+            rng.font.italic = italic
+            applied.append(f"italic={italic}")
+
+        if underline is not None:
+            # xlUnderlineStyleSingle = 2, xlUnderlineStyleNone = -4142
+            rng.api.Font.Underline = 2 if underline else -4142
+            applied.append(f"underline={underline}")
 
         if font_size is not None:
             rng.font.size = font_size
@@ -415,6 +428,26 @@ class ExcelHandler:
         if number_format is not None:
             rng.number_format = number_format
             applied.append(f"number_format={number_format}")
+
+        if alignment is not None:
+            align_map = {
+                "left": -4131,      # xlLeft
+                "center": -4108,    # xlCenter
+                "right": -4152,     # xlRight
+                "justify": -4130,   # xlJustify
+            }
+            xl_align = align_map.get(alignment.lower())
+            if xl_align is None:
+                raise ExcelError(
+                    f"Unknown alignment '{alignment}'. "
+                    "Use: left, center, right, justify."
+                )
+            rng.api.HorizontalAlignment = xl_align
+            applied.append(f"alignment={alignment}")
+
+        if wrap_text is not None:
+            rng.wrap_text = wrap_text
+            applied.append(f"wrap_text={wrap_text}")
 
         if border is not None and border:
             # Apply thin borders on all edges (xlThin = 2)
@@ -445,3 +478,190 @@ class ExcelHandler:
 
         wb.save()
         return {"message": f"Workbook '{wb.name}' saved to '{wb.fullname}'."}
+
+    # ------------------------------------------------------------------ #
+    #  Active Excel tools (xlwings-exclusive capabilities)
+    # ------------------------------------------------------------------ #
+
+    def get_active_workbook(self) -> dict:
+        app = self._get_app()
+        wb = app.books.active
+        if wb is None:
+            raise ExcelError("No active workbook found.")
+
+        ws = wb.sheets.active
+        info: dict[str, Any] = {
+            "name": wb.name,
+            "path": wb.fullname,
+            "sheets": [s.name for s in wb.sheets],
+            "active_sheet": ws.name,
+        }
+
+        # Include current selection info
+        try:
+            sel = app.selection
+            if sel is not None:
+                info["selection"] = {
+                    "address": sel.address,
+                    "sheet": sel.sheet.name,
+                }
+        except Exception:
+            pass
+
+        return info
+
+    def read_selection(self) -> dict:
+        app = self._get_app()
+        sel = app.selection
+        if sel is None:
+            raise ExcelError("No cells are currently selected in Excel.")
+
+        raw = sel.value
+        if raw is None:
+            return {
+                "data": [],
+                "range": sel.address,
+                "sheet": sel.sheet.name,
+                "workbook": sel.sheet.book.name,
+                "rows": 0,
+                "columns": 0,
+            }
+
+        # Normalise to 2D list
+        if not isinstance(raw, list):
+            data = [[raw]]
+        elif raw and not isinstance(raw[0], list):
+            data = [raw]
+        else:
+            data = raw
+
+        data = [_serialize_row(row) for row in data]
+
+        return {
+            "data": data,
+            "range": sel.address,
+            "sheet": sel.sheet.name,
+            "workbook": sel.sheet.book.name,
+            "rows": len(data),
+            "columns": len(data[0]) if data else 0,
+        }
+
+    def activate_sheet(
+        self,
+        workbook: str,
+        sheet: str,
+    ) -> dict:
+        wb = self._get_workbook(workbook)
+        ws = self._get_sheet(wb, sheet)
+        ws.activate()
+        return {
+            "message": f"Sheet '{sheet}' is now active.",
+            "workbook": wb.name,
+            "active_sheet": ws.name,
+        }
+
+    def run_macro(
+        self,
+        macro_name: str,
+        workbook: str | None = None,
+        args: list | None = None,
+    ) -> dict:
+        app = self._get_app()
+
+        # Build the fully-qualified macro name if workbook is specified
+        if workbook:
+            wb = self._get_workbook(workbook)
+            qualified = f"'{wb.name}'!{macro_name}"
+        else:
+            qualified = macro_name
+
+        try:
+            if args:
+                result = app.macro(qualified)(*args)
+            else:
+                result = app.macro(qualified)()
+        except Exception as exc:
+            raise ExcelError(f"Failed to run macro '{macro_name}': {exc}")
+
+        return {
+            "message": f"Macro '{macro_name}' executed successfully.",
+            "return_value": _serialize_value(result),
+        }
+
+    def close_workbook(
+        self,
+        workbook: str,
+        save: bool = False,
+    ) -> dict:
+        wb = self._get_workbook(workbook)
+        name = wb.name
+        if save:
+            wb.save()
+        wb.close()
+        return {"message": f"Workbook '{name}' closed (save={save})."}
+
+    def recalculate(self, workbook: str | None = None) -> dict:
+        app = self._get_app()
+        if workbook:
+            wb = self._get_workbook(workbook)
+            wb.app.calculate()
+            return {"message": f"Workbook '{wb.name}' recalculated."}
+        app.calculate()
+        return {"message": "All open workbooks recalculated."}
+
+    # ------------------------------------------------------------------ #
+    #  Structure manipulation
+    # ------------------------------------------------------------------ #
+
+    def insert_delete_cells(
+        self,
+        workbook: str,
+        action: str,
+        sheet: str | None = None,
+        position: int = 1,
+        count: int = 1,
+        target: str = "row",
+    ) -> dict:
+        wb = self._get_workbook(workbook)
+        ws = self._get_sheet(wb, sheet)
+
+        if target not in ("row", "column"):
+            raise ExcelError("target must be 'row' or 'column'.")
+        if count < 1:
+            raise ExcelError("count must be >= 1.")
+
+        if action == "insert":
+            if target == "row":
+                rng_str = f"{position}:{position + count - 1}"
+                ws.range(rng_str).api.EntireRow.Insert()
+                return {
+                    "message": f"Inserted {count} row(s) at row {position}.",
+                    "sheet": ws.name,
+                }
+            else:
+                rng = ws.range((1, position), (1, position + count - 1))
+                rng.api.EntireColumn.Insert()
+                return {
+                    "message": f"Inserted {count} column(s) at column {position}.",
+                    "sheet": ws.name,
+                }
+
+        if action == "delete":
+            if target == "row":
+                rng_str = f"{position}:{position + count - 1}"
+                ws.range(rng_str).api.EntireRow.Delete()
+                return {
+                    "message": f"Deleted {count} row(s) starting at row {position}.",
+                    "sheet": ws.name,
+                }
+            else:
+                rng = ws.range((1, position), (1, position + count - 1))
+                rng.api.EntireColumn.Delete()
+                return {
+                    "message": f"Deleted {count} column(s) starting at column {position}.",
+                    "sheet": ws.name,
+                }
+
+        raise ExcelError(
+            f"Unknown action '{action}'. Use: insert, delete."
+        )
