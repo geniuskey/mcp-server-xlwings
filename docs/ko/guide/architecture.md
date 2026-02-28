@@ -22,7 +22,7 @@ FastMCP로 구동되는 Python 프로세스입니다. 도구 호출을 수신하
 
 ### COM 자동화 (xlwings)
 
-Windows COM을 통해 실행 중인 Excel 프로세스에 연결합니다. VBA 매크로가 사용하는 것과 동일한 인터페이스로, DRM 보호 및 암호화된 문서를 포함하여 Excel이 열어둔 모든 파일에 접근할 수 있습니다.
+Windows COM을 통해 실행 중인 Excel 프로세스에 연결합니다(**Windows 전용**). VBA 매크로가 사용하는 것과 동일한 인터페이스로, DRM 보호 및 암호화된 문서를 포함하여 Excel이 열어둔 모든 파일에 접근할 수 있습니다.
 
 ### Excel 프로세스
 

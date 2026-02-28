@@ -22,7 +22,7 @@ A Python process running FastMCP. Receives tool calls, translates them into xlwi
 
 ### COM Automation (xlwings)
 
-Connects to the running Excel process via Windows COM (the same interface VBA macros use). Can access any file Excel has open, including DRM-protected and encrypted documents.
+Connects to the running Excel process via Windows COM (the same interface VBA macros use, **Windows only**). Can access any file Excel has open, including DRM-protected and encrypted documents.
 
 ### Excel Process
 

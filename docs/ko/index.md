@@ -4,7 +4,7 @@ layout: home
 hero:
   name: mcp-server-xlwings
   text: AI 에이전트를 위한 Excel 자동화
-  tagline: COM을 통해 실행 중인 Excel을 직접 제어하는 MCP 서버. DRM 보호 파일도 지원합니다.
+  tagline: COM을 통해 실행 중인 Excel을 직접 제어하는 MCP 서버. DRM 보호 파일도 지원합니다. Windows 전용.
   image:
     src: /logo.svg
     alt: mcp-server-xlwings

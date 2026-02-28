@@ -14,7 +14,7 @@
 | Cell formatting (read) | ✅ | ✅ | ❌ |
 | Cell formatting (write) | ✅ | ✅ | ❌ |
 | Chart detection | ✅ | ✅ | ❌ |
-| Cross-platform | ❌ | ✅ | ✅ |
+| Cross-platform | ❌ Windows only | ✅ | ✅ |
 | No Excel required | ❌ | ✅ | ✅ |
 | Headless / CI usage | ❌ | ✅ | ✅ |
 
