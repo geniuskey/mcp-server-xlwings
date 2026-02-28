@@ -1,6 +1,6 @@
 [project]
 name = "mcp-server-xlwings"
-version = "0.3.0"
+version = "0.3.1"
 description = "MCP server for Excel automation via xlwings COM. Supports DRM-protected files."
 readme = "README.md"
 license = {text = "MIT"}
@@ -25,7 +25,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/geniuskey/mcp-server-xlwings"
+Homepage = "https://geniuskey.github.io/mcp-server-xlwings/"
+Documentation = "https://geniuskey.github.io/mcp-server-xlwings/"
 Repository = "https://github.com/geniuskey/mcp-server-xlwings"
 Issues = "https://github.com/geniuskey/mcp-server-xlwings/issues"
 Changelog = "https://github.com/geniuskey/mcp-server-xlwings/blob/main/CHANGELOG.md"
