@@ -45,28 +45,23 @@ export default defineConfig({
           { text: "가이드", link: "/ko/guide/getting-started" },
           { text: "도구", link: "/ko/tools/" },
           { text: "예시", link: "/ko/examples" },
+          { text: "변경 이력", link: "/ko/changelog" },
         ],
-        sidebar: [
-          {
-            text: "가이드",
-            items: [
-              { text: "시작하기", link: "/ko/guide/getting-started" },
-              { text: "설정", link: "/ko/guide/configuration" },
-              { text: "아키텍처", link: "/ko/guide/architecture" },
-              { text: "비교", link: "/ko/guide/comparison" },
-              { text: "성능 가이드", link: "/ko/guide/performance" },
-              { text: "문제 해결", link: "/ko/guide/troubleshooting" },
-            ],
-          },
-          {
-            text: "레퍼런스",
-            items: [
-              { text: "도구", link: "/ko/tools/" },
-              { text: "예시", link: "/ko/examples" },
-              { text: "변경 이력", link: "/ko/changelog" },
-            ],
-          },
-        ],
+        sidebar: {
+          "/ko/guide/": [
+            {
+              text: "가이드",
+              items: [
+                { text: "시작하기", link: "/ko/guide/getting-started" },
+                { text: "설정", link: "/ko/guide/configuration" },
+                { text: "아키텍처", link: "/ko/guide/architecture" },
+                { text: "비교", link: "/ko/guide/comparison" },
+                { text: "성능 가이드", link: "/ko/guide/performance" },
+                { text: "문제 해결", link: "/ko/guide/troubleshooting" },
+              ],
+            },
+          ],
+        },
       },
     },
   },
@@ -76,28 +71,23 @@ export default defineConfig({
       { text: "Guide", link: "/guide/getting-started" },
       { text: "Tools", link: "/tools/" },
       { text: "Examples", link: "/examples" },
+      { text: "Changelog", link: "/changelog" },
     ],
-    sidebar: [
-      {
-        text: "Guide",
-        items: [
-          { text: "Getting Started", link: "/guide/getting-started" },
-          { text: "Configuration", link: "/guide/configuration" },
-          { text: "Architecture", link: "/guide/architecture" },
-          { text: "Comparison", link: "/guide/comparison" },
-          { text: "Performance", link: "/guide/performance" },
-          { text: "Troubleshooting", link: "/guide/troubleshooting" },
-        ],
-      },
-      {
-        text: "Reference",
-        items: [
-          { text: "Tools", link: "/tools/" },
-          { text: "Examples", link: "/examples" },
-          { text: "Changelog", link: "/changelog" },
-        ],
-      },
-    ],
+    sidebar: {
+      "/guide/": [
+        {
+          text: "Guide",
+          items: [
+            { text: "Getting Started", link: "/guide/getting-started" },
+            { text: "Configuration", link: "/guide/configuration" },
+            { text: "Architecture", link: "/guide/architecture" },
+            { text: "Comparison", link: "/guide/comparison" },
+            { text: "Performance", link: "/guide/performance" },
+            { text: "Troubleshooting", link: "/guide/troubleshooting" },
+          ],
+        },
+      ],
+    },
     socialLinks: [
       {
         icon: "github",
