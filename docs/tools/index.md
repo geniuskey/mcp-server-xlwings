@@ -74,10 +74,12 @@ Read data from an Excel range. When `cell_range` is omitted, returns a **sheet s
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `workbook` | string | No | Defaults to active workbook |
-| `sheet` | string | No | Defaults to active sheet |
+| `sheet` | string | No | Defaults to active sheet. Use `*` to read all sheets |
 | `cell_range` | string | No | Range like `A1:D10`. Returns sheet summary if omitted |
 | `headers` | bool | No | Treat first row as headers (default `true`) |
 | `detail` | bool | No | For single cells: include formula, type, format info |
+| `merge_info` | bool | No | Fill merged cells with the merge area's value instead of null (default `false`) |
+| `header_row` | int | No | 1-based row number to use as headers (e.g. `3` means row 3) |
 
 **Example -- sheet summary (no range):**
 
@@ -142,6 +144,46 @@ Read data from an Excel range. When `cell_range` is omitted, returns a **sheet s
     "formula": "=SUM(C2:C9)",
     "number_format": "#,##0",
     "font": { "name": "Calibri", "size": 11, "bold": true, "italic": false }
+  }
+}
+```
+
+**Example -- merge_info:**
+
+```json
+// Request
+{ "cell_range": "B6:C8", "merge_info": true }
+
+// Response
+{
+  "range": "$B$6:$C$8",
+  "sheet": "Sheet1",
+  "rows": 3,
+  "columns": 2,
+  "headers": ["건축 계획", "대지"],
+  "data": [
+    ["건축 계획", "면적"],
+    ["건축 계획", null]
+  ],
+  "merged_ranges": [
+    { "range": "$B$6:$B$19", "value": "건축 계획" }
+  ]
+}
+```
+
+**Example -- batch read all sheets:**
+
+```json
+// Request
+{ "sheet": "*" }
+
+// Response
+{
+  "sheet_count": 3,
+  "sheets": {
+    "Sheet1": { "sheet": "Sheet1", "used_range": "$A$1:$D$50", "total_rows": 50, "total_columns": 4, "headers": ["ID", "Name", "Date", "Amount"] },
+    "Sheet2": { "sheet": "Sheet2", "used_range": "$A$1:$B$20", "total_rows": 20, "total_columns": 2, "headers": ["Category", "Total"] },
+    "Summary": { "sheet": "Summary", "used_range": "$A$1:$C$5", "total_rows": 5, "total_columns": 3, "headers": ["Metric", "Value", "Change"] }
   }
 }
 ```
@@ -317,5 +359,110 @@ Execute a VBA macro in Excel and return its result.
 {
   "message": "Macro 'UpdateReport' executed successfully.",
   "return_value": "Report updated"
+}
+```
+
+---
+
+## get_formulas
+
+Get all formulas in a range. Returns only cells that contain formulas.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `cell_range` | string | Yes | Range like `A1:U99` |
+| `workbook` | string | No | Defaults to active workbook |
+| `sheet` | string | No | Defaults to active sheet |
+| `values_too` | bool | No | Include calculated values alongside formulas (default `false`) |
+
+**Example:**
+
+```json
+// Request
+{ "cell_range": "A1:U99", "values_too": true }
+
+// Response
+{
+  "formulas": [
+    { "cell": "J22", "formula": "=E22*H22", "value": 37828200 },
+    { "cell": "K22", "formula": "=J22/$J$36", "value": 0.3739 }
+  ],
+  "total_formula_cells": 2,
+  "range": "$A$1:$U$99",
+  "sheet": "Sheet1"
+}
+```
+
+---
+
+## get_cell_styles
+
+Get formatting/style info for cells in a range. Returns only cells with non-default styles. Useful for identifying headers, subtotals, and data roles by visual formatting.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `cell_range` | string | Yes | Range like `A1:D10` |
+| `workbook` | string | No | Defaults to active workbook |
+| `sheet` | string | No | Defaults to active sheet |
+| `properties` | array | No | Filter specific properties: `bold`, `italic`, `underline`, `font_name`, `font_size`, `font_color`, `bg_color`, `number_format`, `alignment`, `border` |
+
+**Example:**
+
+```json
+// Request
+{ "cell_range": "A1:D5", "properties": ["bold", "bg_color", "font_color"] }
+
+// Response
+{
+  "range": "$A$1:$D$5",
+  "sheet": "Sheet1",
+  "styles": [
+    { "bold": true, "bg_color": "#1B3A5C", "font_color": "#FFFFFF", "cell": "A1" },
+    { "bold": true, "bg_color": "#1B3A5C", "font_color": "#FFFFFF", "cell": "B1" },
+    { "bold": true, "cell": "A5" }
+  ]
+}
+```
+
+---
+
+## get_objects
+
+List charts, images, and shapes on a sheet.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `workbook` | string | No | Defaults to active workbook |
+| `sheet` | string | No | Defaults to active sheet |
+
+**Example:**
+
+```json
+// Request
+{ }
+
+// Response
+{
+  "sheet": "Dashboard",
+  "charts": [
+    {
+      "name": "Chart 1",
+      "top_left_cell": "$F$2",
+      "width": 480,
+      "height": 300,
+      "chart_type": "5",
+      "title": "Monthly Revenue"
+    }
+  ],
+  "images": [
+    { "name": "Picture 1", "top_left_cell": "$A$1", "width": 200, "height": 80 }
+  ],
+  "shapes": []
 }
 ```

@@ -18,6 +18,6 @@ features:
     details: Uses COM automation to talk to the running Excel process. Opens any file that Excel can open, including encrypted and DRM-protected documents.
   - title: Live Excel Control
     details: Read selections, run VBA macros, get live formula results, and force recalculation. Features impossible with file-based libraries like openpyxl.
-  - title: 8 Consolidated Tools
-    details: Optimized tool set with optional workbook parameter, sheet structure analysis, merged cell detection, and multi-region support for complex spreadsheets.
+  - title: 11 Powerful Tools
+    details: Optimized tool set with merged cell filling, batch formula/style queries, chart/shape detection, and all-sheets batch reading for complex spreadsheets.
 ---

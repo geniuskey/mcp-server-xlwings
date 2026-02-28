@@ -120,7 +120,7 @@ mcpServers:
       - mcp-server-xlwings
 ```
 
-## Available Tools (8)
+## Available Tools (11)
 
 All tools default to the **active workbook** when `workbook` is omitted.
 
@@ -128,12 +128,15 @@ All tools default to the **active workbook** when `workbook` is omitted.
 |------|-------------|
 | `get_active_workbook` | Get active workbook info, sheets, and current selection with data |
 | `manage_workbooks` | List, open, save, close, or recalculate workbooks |
-| `read_data` | Read a cell range. Set `detail=True` on a single cell for formula/format info |
+| `read_data` | Read a range with `merge_info`, `header_row`, `sheet="*"` batch read, and `detail` mode |
 | `write_data` | Write a 2D array (`data`) or a single-cell formula (`formula`) |
 | `manage_sheets` | List, add, delete, rename, copy, activate sheets. Insert/delete rows and columns |
 | `find_replace` | Search for text, optionally replace it |
 | `format_range` | Apply formatting (bold, italic, color, borders, alignment, number format, etc.) |
 | `run_macro` | Execute a VBA macro and get its return value |
+| `get_formulas` | Get all formulas in a range with optional calculated values |
+| `get_cell_styles` | Get formatting/style info (bold, colors, borders, etc.) for cells in a range |
+| `get_objects` | List charts, images, and shapes on a sheet |
 
 ## Examples
 
@@ -166,6 +169,24 @@ The agent calls `write_data(start_cell="C10", formula="=SUM(C2:C9)")` and gets b
 > "Make row 1 bold and centered with a yellow background"
 
 The agent calls `format_range(cell_range="A1:D1", bold=true, alignment="center", bg_color="#FFFF00")`.
+
+### Read all sheets at once
+
+> "Give me a summary of every sheet"
+
+The agent calls `read_data(sheet="*")` -- returns all sheet summaries in a single call.
+
+### Read merged cells properly
+
+> "Read B6:C20 and fill in merged cell values"
+
+The agent calls `read_data(cell_range="B6:C20", merge_info=true)`. Merged cells return the parent value instead of null.
+
+### Find all formulas
+
+> "Show me all formulas in this sheet"
+
+The agent calls `get_formulas(cell_range="A1:Z100", values_too=true)` and gets every formula with its calculated value.
 
 ### Insert rows
 

@@ -38,6 +38,36 @@ Agent calls `read_data()` without a range. The response includes:
 }
 ```
 
+## Read All Sheets at Once
+
+> "Give me a summary of every sheet in this workbook"
+
+Agent calls `read_data(sheet="*")` -- returns summaries of all sheets in a single call.
+
+## Read Data with Merged Cells
+
+> "Read B6:C20 and fill in the merged cell values"
+
+Agent calls `read_data(cell_range="B6:C20", merge_info=true)`. Merged cells are filled with the parent cell's value instead of returning null.
+
+## Find All Formulas
+
+> "Show me all formulas in the revenue sheet"
+
+Agent calls `get_formulas(cell_range="A1:Z100", sheet="Revenue", values_too=true)` -- returns every formula with its calculated value.
+
+## Identify Headers by Style
+
+> "Which cells are bold or have a colored background?"
+
+Agent calls `get_cell_styles(cell_range="A1:Z10", properties=["bold", "bg_color"])` -- returns only cells with non-default bold or background color.
+
+## Check for Charts and Images
+
+> "Are there any charts or images in this sheet?"
+
+Agent calls `get_objects()` -- lists all charts, images, and shapes with their positions and sizes.
+
 ## Build a Summary Row
 
 > "Add a SUM formula in C10 that totals C2:C9"

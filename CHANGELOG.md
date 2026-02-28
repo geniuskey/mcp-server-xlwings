@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0 (2026-02-28)
+
+- `read_data` enhanced: `merge_info=true` fills merged cells with values + returns `merged_ranges`
+- `read_data` enhanced: `header_row` parameter to specify which row is the header (1-based)
+- `read_data` enhanced: `sheet="*"` batch-reads all sheets in one call
+- New tool: `get_formulas` -- batch query all formulas in a range with optional calculated values
+- New tool: `get_cell_styles` -- batch query cell formatting (bold, colors, number format, etc.)
+- New tool: `get_objects` -- list charts, images, and shapes on a sheet
+- Tool count: 8 → 11
+
 ## 0.3.0 (2026-02-28)
 
 - `read_data()` without `cell_range` returns sheet summary instead of full data dump
