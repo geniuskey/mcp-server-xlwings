@@ -2,6 +2,7 @@
 
 MCP server for Excel automation via xlwings COM. Works with DRM-protected files.
 
+[![PyPI](https://img.shields.io/pypi/v/mcp-server-xlwings.svg)](https://pypi.org/project/mcp-server-xlwings/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 
@@ -22,7 +23,7 @@ These features are **impossible** with file-based libraries like openpyxl:
 - **Read the user's current selection** -- see exactly what the user is looking at
 - **Get the active workbook** -- no need to specify a file path
 - **Run VBA macros** -- execute existing macros and get their return values
-- **Live formula results** -- `set_formula` returns the calculated value immediately
+- **Live formula results** -- set a formula and get the calculated value immediately
 - **Force recalculation** -- trigger Excel to recalculate all formulas
 
 ## Installation
@@ -43,7 +44,7 @@ pip install mcp-server-xlwings
 
 ### Claude Desktop
 
-Add to your `claude_desktop_config.json`:
+Add to `%APPDATA%\Claude\claude_desktop_config.json`:
 
 ```json
 {
@@ -56,68 +57,83 @@ Add to your `claude_desktop_config.json`:
 }
 ```
 
-Or with a local Python installation:
-
-```json
-{
-  "mcpServers": {
-    "xlwings": {
-      "command": "python",
-      "args": ["-m", "mcp_server_xlwings"]
-    }
-  }
-}
-```
-
 ### Claude Code
 
 ```bash
 claude mcp add xlwings -- uvx mcp-server-xlwings
 ```
 
-## Available Tools (17)
+### Roo Code (VS Code)
 
-### Active Excel (xlwings-exclusive)
+Add to Roo Code MCP settings or create `<project-root>/.roo/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "xlwings": {
+      "command": "uvx",
+      "args": ["mcp-server-xlwings"]
+    }
+  }
+}
+```
+
+### Cursor
+
+Add to `%USERPROFILE%\.cursor\mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "xlwings": {
+      "command": "uvx",
+      "args": ["mcp-server-xlwings"]
+    }
+  }
+}
+```
+
+### Windsurf
+
+Add to `%USERPROFILE%\.codeium\windsurf\mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "xlwings": {
+      "command": "uvx",
+      "args": ["mcp-server-xlwings"]
+    }
+  }
+}
+```
+
+### Continue (VS Code)
+
+Add to `~/.continue/config.yaml`:
+
+```yaml
+mcpServers:
+  - name: xlwings
+    command: uvx
+    args:
+      - mcp-server-xlwings
+```
+
+## Available Tools (8)
+
+All tools default to the **active workbook** when `workbook` is omitted.
 
 | Tool | Description |
 |------|-------------|
-| `get_active_workbook` | Get info about the currently active workbook, sheet, and selection |
-| `read_selection` | Read data from the cells the user currently has selected |
-| `activate_sheet` | Switch the visible sheet in Excel |
-| `run_macro` | Execute a VBA macro and get its return value |
-| `close_workbook` | Close a workbook, optionally saving first |
-| `recalculate` | Force recalculation of all formulas |
-
-### Core Workbook
-
-| Tool | Description |
-|------|-------------|
-| `list_open_workbooks` | List all currently open workbooks |
-| `open_workbook` | Open a file or create a new workbook |
-| `save_workbook` | Save or Save As |
-
-### Read / Write
-
-| Tool | Description |
-|------|-------------|
-| `read_range` | Read data from a cell range |
-| `write_range` | Write a 2D array to a cell range |
-| `read_cell_info` | Get detailed cell info (value, formula, format, type) |
-| `set_formula` | Set a formula and get the calculated result immediately |
+| `get_active_workbook` | Get active workbook info, sheets, and current selection with data |
+| `manage_workbooks` | List, open, save, close, or recalculate workbooks |
+| `read_data` | Read a cell range. Set `detail=True` on a single cell for formula/format info |
+| `write_data` | Write a 2D array (`data`) or a single-cell formula (`formula`) |
+| `manage_sheets` | List, add, delete, rename, copy, activate sheets. Insert/delete rows and columns |
 | `find_replace` | Search for text, optionally replace it |
-
-### Sheet & Structure
-
-| Tool | Description |
-|------|-------------|
-| `manage_sheets` | List, add, delete, rename, or copy sheets |
-| `insert_delete_cells` | Insert or delete rows/columns |
-
-### Formatting
-
-| Tool | Description |
-|------|-------------|
-| `format_range` | Apply formatting (bold, italic, underline, color, borders, alignment, wrap text, number format) |
+| `format_range` | Apply formatting (bold, italic, color, borders, alignment, number format, etc.) |
+| `run_macro` | Execute a VBA macro and get its return value |
 
 ## Examples
 
@@ -125,13 +141,13 @@ claude mcp add xlwings -- uvx mcp-server-xlwings
 
 > "What's in the spreadsheet I have open?"
 
-The agent calls `get_active_workbook()` to discover the workbook name and sheets, then `read_range()` to fetch the data.
+The agent calls `get_active_workbook()` to get the workbook name, sheets, and selection data, then `read_data()` to fetch the full sheet.
 
-### Read the user's selection
+### Summarize selected data
 
 > "Summarize the data I've selected"
 
-The agent calls `read_selection()` to get exactly the cells the user has highlighted.
+The agent calls `get_active_workbook()` -- the response includes the selection data directly.
 
 ### Run a macro
 
@@ -143,19 +159,19 @@ The agent calls `run_macro(macro_name="UpdateReport")` and returns the result.
 
 > "Add a SUM formula in C10 that totals C2:C9"
 
-The agent calls `set_formula(workbook="report.xlsx", cell="C10", formula="=SUM(C2:C9)")` and gets back the calculated value.
+The agent calls `write_data(start_cell="C10", formula="=SUM(C2:C9)")` and gets back the calculated value.
 
 ### Format a header row
 
 > "Make row 1 bold and centered with a yellow background"
 
-The agent calls `format_range(workbook="report.xlsx", cell_range="A1:D1", bold=true, alignment="center", bg_color="#FFFF00")`.
+The agent calls `format_range(cell_range="A1:D1", bold=true, alignment="center", bg_color="#FFFF00")`.
 
 ### Insert rows
 
 > "Insert 3 blank rows at row 5"
 
-The agent calls `insert_delete_cells(workbook="report.xlsx", action="insert", target="row", position=5, count=3)`.
+The agent calls `manage_sheets(action="insert_rows", position=5, count=3)`.
 
 ## Requirements
 

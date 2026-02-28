@@ -95,13 +95,16 @@ def read_data(
     headers: bool = True,
     detail: bool = False,
 ) -> dict:
-    """Read data from an Excel range. Reads the entire used range when cell_range is omitted.
+    """Read data from an Excel range.
+    When cell_range is omitted, returns a sheet summary (used range address,
+    total rows/columns, headers) WITHOUT reading all data -- call again with
+    a specific cell_range to fetch the actual data.
     Set detail=True on a single cell to get formula, type, and formatting info.
 
     Args:
         workbook: Workbook name or path. Defaults to active workbook.
         sheet: Sheet name. Defaults to active sheet.
-        cell_range: Range like 'A1:D10' or cell like 'B5'. Reads used range if omitted.
+        cell_range: Range like 'A1:D10' or cell like 'B5'. Returns sheet summary if omitted.
         headers: Treat first row as column headers.
         detail: For single cells, include formula, type, number format, and font info.
     """

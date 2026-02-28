@@ -108,10 +108,19 @@ class ExcelHandler:
             raise ExcelError("No active workbook found.")
 
         ws = wb.sheets.active
+        sheets_meta = []
+        for s in wb.sheets:
+            used = s.used_range
+            sheets_meta.append({
+                "name": s.name,
+                "used_range": used.address,
+                "rows": used.rows.count,
+                "columns": used.columns.count,
+            })
         info: dict[str, Any] = {
             "name": wb.name,
             "path": wb.fullname,
-            "sheets": [s.name for s in wb.sheets],
+            "sheets": sheets_meta,
             "active_sheet": ws.name,
         }
 
@@ -147,10 +156,19 @@ class ExcelHandler:
             app = self._get_app()
             result = []
             for wb in app.books:
+                sheets_meta = []
+                for s in wb.sheets:
+                    used = s.used_range
+                    sheets_meta.append({
+                        "name": s.name,
+                        "used_range": used.address,
+                        "rows": used.rows.count,
+                        "columns": used.columns.count,
+                    })
                 result.append({
                     "name": wb.name,
                     "path": wb.fullname,
-                    "sheets": [s.name for s in wb.sheets],
+                    "sheets": sheets_meta,
                 })
             return result
 
@@ -225,11 +243,88 @@ class ExcelHandler:
         wb = self._get_workbook_or_active(workbook)
         ws = self._get_sheet(wb, sheet)
 
-        if cell_range:
-            rng = ws.range(cell_range)
-        else:
-            rng = ws.used_range
+        # No range specified: return sheet summary without reading data
+        if cell_range is None:
+            used = ws.used_range
+            total_rows = used.rows.count
+            total_cols = used.columns.count
+            result: dict[str, Any] = {
+                "sheet": ws.name,
+                "used_range": used.address,
+                "total_rows": total_rows,
+                "total_columns": total_cols,
+            }
+            # Include first-row headers for context
+            if total_rows >= 1:
+                first_row = ws.range(
+                    (used.row, used.column),
+                    (used.row, used.column + total_cols - 1),
+                ).value
+                if not isinstance(first_row, list):
+                    first_row = [first_row]
+                result["headers"] = [_serialize_value(v) for v in first_row]
 
+            # Merged cells - scan header area (first 20 rows) for performance
+            try:
+                merge_flag = ws.api.UsedRange.MergeCells
+                # False = no merges, True/None = some or all merged
+                if merge_flag is not False:
+                    merged: list[dict] = []
+                    visited_addrs: set[str] = set()
+                    scan_rows = min(20, total_rows)
+                    header_rng = ws.range(
+                        (used.row, used.column),
+                        (used.row + scan_rows - 1, used.column + total_cols - 1),
+                    )
+                    for cell in header_rng:
+                        if cell.api.MergeCells:
+                            ma = cell.api.MergeArea
+                            addr = ma.Address
+                            if addr not in visited_addrs:
+                                visited_addrs.add(addr)
+                                merged.append({
+                                    "range": addr,
+                                    "value": _serialize_value(ma.Cells(1, 1).Value),
+                                    "rows": ma.Rows.Count,
+                                    "columns": ma.Columns.Count,
+                                })
+                    if merged:
+                        result["merged_cells"] = merged
+            except Exception:
+                pass
+
+            # Region detection - probe strategic cells (fast, max ~5 COM calls)
+            try:
+                api_used = ws.api.UsedRange
+                first_cr = api_used.Cells(1, 1).CurrentRegion
+                regions: list[dict] = [{
+                    "range": first_cr.Address,
+                    "rows": first_cr.Rows.Count,
+                    "columns": first_cr.Columns.Count,
+                }]
+                seen: set[str] = {first_cr.Address}
+
+                for probe_row in [total_rows, total_rows // 2]:
+                    if probe_row < 2:
+                        continue
+                    probe = api_used.Cells(probe_row, 1)
+                    if probe.Value is not None:
+                        cr = probe.CurrentRegion
+                        if cr.Address not in seen:
+                            seen.add(cr.Address)
+                            regions.append({
+                                "range": cr.Address,
+                                "rows": cr.Rows.Count,
+                                "columns": cr.Columns.Count,
+                            })
+                if len(regions) > 1:
+                    result["regions"] = regions
+            except Exception:
+                pass
+
+            return result
+
+        rng = ws.range(cell_range)
         raw = rng.value
         if raw is None:
             return {
