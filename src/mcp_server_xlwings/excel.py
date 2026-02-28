@@ -34,6 +34,17 @@ def _serialize_row(row: list[Any]) -> list[Any]:
     return [_serialize_value(v) for v in row]
 
 
+def _to_2d(raw: Any) -> list[list[Any]]:
+    """Normalise raw xlwings value to a serialized 2D list."""
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        return [[_serialize_value(raw)]]
+    if raw and not isinstance(raw[0], list):
+        return [_serialize_row(raw)]
+    return [_serialize_row(row) for row in raw]
+
+
 class ExcelHandler:
     """Stateless wrapper around xlwings for Excel COM automation."""
 
@@ -57,13 +68,22 @@ class ExcelHandler:
         for wb in app.books:
             if wb.name == workbook or wb.fullname == workbook:
                 return wb
-        # Not found among open books -- try to open from path
         path = Path(workbook)
         if path.exists():
             return app.books.open(str(path))
         raise ExcelError(
             f"Workbook '{workbook}' is not open and the path does not exist."
         )
+
+    def _get_workbook_or_active(self, workbook: str | None) -> xw.Book:
+        """Return the specified workbook, or the active workbook if None."""
+        if workbook is not None:
+            return self._get_workbook(workbook)
+        app = self._get_app()
+        wb = app.books.active
+        if wb is None:
+            raise ExcelError("No active workbook found.")
+        return wb
 
     def _get_sheet(self, wb: xw.Book, sheet: str | None) -> xw.Sheet:
         """Return the requested sheet or the active sheet."""
@@ -78,55 +98,131 @@ class ExcelHandler:
             )
 
     # ------------------------------------------------------------------ #
-    #  Tool implementations
+    #  Tool 1: get_active_workbook (includes selection data)
     # ------------------------------------------------------------------ #
 
-    def list_open_workbooks(self) -> list[dict]:
+    def get_active_workbook(self) -> dict:
         app = self._get_app()
-        result = []
-        for wb in app.books:
-            result.append(
-                {
-                    "name": wb.name,
-                    "path": wb.fullname,
-                    "sheets": [s.name for s in wb.sheets],
-                }
-            )
-        return result
+        wb = app.books.active
+        if wb is None:
+            raise ExcelError("No active workbook found.")
 
-    def open_workbook(
-        self, filepath: str, read_only: bool = True
-    ) -> dict:
-        app = self._get_app()
-        if filepath.lower() == "new":
-            wb = app.books.add()
-        else:
-            path = Path(filepath)
-            if not path.exists():
-                raise ExcelError(f"File not found: {filepath}")
-            # Check if already open
-            for wb in app.books:
-                if wb.fullname == str(path.resolve()):
-                    return {
-                        "name": wb.name,
-                        "path": wb.fullname,
-                        "sheets": [s.name for s in wb.sheets],
-                    }
-            wb = app.books.open(str(path), read_only=read_only)
-        return {
+        ws = wb.sheets.active
+        info: dict[str, Any] = {
             "name": wb.name,
             "path": wb.fullname,
             "sheets": [s.name for s in wb.sheets],
+            "active_sheet": ws.name,
         }
 
-    def read_range(
+        try:
+            sel = app.selection
+            if sel is not None:
+                sel_data = _to_2d(sel.value)
+                info["selection"] = {
+                    "address": sel.address,
+                    "sheet": sel.sheet.name,
+                    "data": sel_data,
+                    "rows": len(sel_data),
+                    "columns": len(sel_data[0]) if sel_data else 0,
+                }
+        except Exception:
+            pass
+
+        return info
+
+    # ------------------------------------------------------------------ #
+    #  Tool 2: manage_workbooks
+    # ------------------------------------------------------------------ #
+
+    def manage_workbooks(
         self,
-        workbook: str,
+        action: str,
+        workbook: str | None = None,
+        filepath: str | None = None,
+        read_only: bool = True,
+        save: bool = False,
+    ) -> dict | list[dict]:
+        if action == "list":
+            app = self._get_app()
+            result = []
+            for wb in app.books:
+                result.append({
+                    "name": wb.name,
+                    "path": wb.fullname,
+                    "sheets": [s.name for s in wb.sheets],
+                })
+            return result
+
+        if action == "open":
+            if filepath is None:
+                raise ExcelError(
+                    "Parameter 'filepath' is required for open action. "
+                    "Use 'new' to create a blank workbook."
+                )
+            app = self._get_app()
+            if filepath.lower() == "new":
+                wb = app.books.add()
+            else:
+                path = Path(filepath)
+                if not path.exists():
+                    raise ExcelError(f"File not found: {filepath}")
+                for wb in app.books:
+                    if wb.fullname == str(path.resolve()):
+                        return {
+                            "name": wb.name,
+                            "path": wb.fullname,
+                            "sheets": [s.name for s in wb.sheets],
+                        }
+                wb = app.books.open(str(path), read_only=read_only)
+            return {
+                "name": wb.name,
+                "path": wb.fullname,
+                "sheets": [s.name for s in wb.sheets],
+            }
+
+        if action == "save":
+            wb = self._get_workbook_or_active(workbook)
+            if filepath:
+                wb.save(filepath)
+                return {"message": f"Workbook saved as '{filepath}'."}
+            wb.save()
+            return {"message": f"Workbook '{wb.name}' saved to '{wb.fullname}'."}
+
+        if action == "close":
+            wb = self._get_workbook_or_active(workbook)
+            name = wb.name
+            if save:
+                wb.save()
+            wb.close()
+            return {"message": f"Workbook '{name}' closed (save={save})."}
+
+        if action == "recalculate":
+            app = self._get_app()
+            if workbook:
+                wb = self._get_workbook(workbook)
+                wb.app.calculate()
+                return {"message": f"Workbook '{wb.name}' recalculated."}
+            app.calculate()
+            return {"message": "All open workbooks recalculated."}
+
+        raise ExcelError(
+            f"Unknown action '{action}'. Use: list, open, save, close, recalculate."
+        )
+
+    # ------------------------------------------------------------------ #
+    #  Tool 3: read_data
+    # ------------------------------------------------------------------ #
+
+    def read_data(
+        self,
+        workbook: str | None = None,
         sheet: str | None = None,
         cell_range: str | None = None,
         headers: bool = True,
+        detail: bool = False,
     ) -> dict:
-        wb = self._get_workbook(workbook)
+        wb = self._get_workbook_or_active(workbook)
         ws = self._get_sheet(wb, sheet)
 
         if cell_range:
@@ -144,15 +240,7 @@ class ExcelHandler:
                 "columns": 0,
             }
 
-        # Normalise to 2D list
-        if not isinstance(raw, list):
-            data = [[raw]]
-        elif raw and not isinstance(raw[0], list):
-            data = [raw]
-        else:
-            data = raw
-
-        data = [_serialize_row(row) for row in data]
+        data = _to_2d(raw)
 
         result: dict[str, Any] = {
             "range": rng.address,
@@ -167,25 +255,79 @@ class ExcelHandler:
         else:
             result["data"] = data
 
+        if detail and rng.size == 1:
+            raw_val = rng.value
+            formula = rng.formula if rng.formula != rng.value else None
+
+            if raw_val is None:
+                value_type = "empty"
+            elif isinstance(raw_val, bool):
+                value_type = "boolean"
+            elif isinstance(raw_val, (int, float)):
+                value_type = "number"
+            elif isinstance(raw_val, str):
+                value_type = "text"
+            elif isinstance(raw_val, (datetime.datetime, datetime.date)):
+                value_type = "date"
+            else:
+                value_type = type(raw_val).__name__
+
+            result["detail"] = {
+                "value": _serialize_value(raw_val),
+                "type": value_type,
+                "formula": formula,
+                "number_format": rng.number_format,
+            }
+            try:
+                font = rng.font
+                result["detail"]["font"] = {
+                    "name": font.name,
+                    "size": font.size,
+                    "bold": font.bold,
+                    "italic": font.italic,
+                    "color": font.color,
+                }
+            except Exception:
+                pass
+
         return result
 
-    def write_range(
+    # ------------------------------------------------------------------ #
+    #  Tool 4: write_data
+    # ------------------------------------------------------------------ #
+
+    def write_data(
         self,
-        workbook: str,
-        sheet: str | None,
         start_cell: str,
-        data: list[list],
+        data: list[list] | None = None,
+        formula: str | None = None,
+        workbook: str | None = None,
+        sheet: str | None = None,
     ) -> dict:
-        wb = self._get_workbook(workbook)
+        if data is not None and formula is not None:
+            raise ExcelError("Provide either 'data' or 'formula', not both.")
+        if data is None and formula is None:
+            raise ExcelError("Either 'data' or 'formula' must be provided.")
+
+        wb = self._get_workbook_or_active(workbook)
         ws = self._get_sheet(wb, sheet)
+
+        if formula is not None:
+            rng = ws.range(start_cell)
+            rng.formula = formula
+            calculated = _serialize_value(rng.value)
+            return {
+                "cell": rng.address,
+                "sheet": ws.name,
+                "formula": formula,
+                "calculated_value": calculated,
+            }
 
         rng = ws.range(start_cell)
         rng.value = data
-
         rows = len(data)
         cols = len(data[0]) if data else 0
         end_cell = rng.expand().address if rows and cols else rng.address
-
         return {
             "message": f"Data written successfully to {ws.name}",
             "start_cell": start_cell,
@@ -194,88 +336,20 @@ class ExcelHandler:
             "columns": cols,
         }
 
-    def read_cell_info(
-        self,
-        workbook: str,
-        sheet: str | None,
-        cell: str,
-    ) -> dict:
-        wb = self._get_workbook(workbook)
-        ws = self._get_sheet(wb, sheet)
-        rng = ws.range(cell)
-
-        value = _serialize_value(rng.value)
-        formula = rng.formula if rng.formula != rng.value else None
-
-        # Determine type label
-        raw = rng.value
-        if raw is None:
-            value_type = "empty"
-        elif isinstance(raw, bool):
-            value_type = "boolean"
-        elif isinstance(raw, (int, float)):
-            value_type = "number"
-        elif isinstance(raw, str):
-            value_type = "text"
-        elif isinstance(raw, (datetime.datetime, datetime.date)):
-            value_type = "date"
-        else:
-            value_type = type(raw).__name__
-
-        info: dict[str, Any] = {
-            "cell": rng.address,
-            "sheet": ws.name,
-            "value": value,
-            "type": value_type,
-            "formula": formula,
-            "number_format": rng.number_format,
-        }
-
-        # Font info
-        try:
-            font = rng.font
-            info["font"] = {
-                "name": font.name,
-                "size": font.size,
-                "bold": font.bold,
-                "italic": font.italic,
-                "color": font.color,
-            }
-        except Exception:
-            pass
-
-        return info
-
-    def set_formula(
-        self,
-        workbook: str,
-        sheet: str | None,
-        cell: str,
-        formula: str,
-    ) -> dict:
-        wb = self._get_workbook(workbook)
-        ws = self._get_sheet(wb, sheet)
-        rng = ws.range(cell)
-
-        rng.formula = formula
-        # Read back the calculated value
-        calculated = _serialize_value(rng.value)
-
-        return {
-            "cell": rng.address,
-            "sheet": ws.name,
-            "formula": formula,
-            "calculated_value": calculated,
-        }
+    # ------------------------------------------------------------------ #
+    #  Tool 5: manage_sheets
+    # ------------------------------------------------------------------ #
 
     def manage_sheets(
         self,
-        workbook: str,
         action: str,
+        workbook: str | None = None,
         sheet: str | None = None,
         new_name: str | None = None,
+        position: int = 1,
+        count: int = 1,
     ) -> dict:
-        wb = self._get_workbook(workbook)
+        wb = self._get_workbook_or_active(workbook)
 
         if action == "list":
             return {
@@ -288,7 +362,10 @@ class ExcelHandler:
             ws = wb.sheets.add(after=wb.sheets[wb.sheets.count - 1])
             if name:
                 ws.name = name
-            return {"message": f"Sheet '{ws.name}' added.", "sheets": [s.name for s in wb.sheets]}
+            return {
+                "message": f"Sheet '{ws.name}' added.",
+                "sheets": [s.name for s in wb.sheets],
+            }
 
         if action == "delete":
             if sheet is None:
@@ -299,7 +376,10 @@ class ExcelHandler:
                 wb.sheets[sheet].delete()
             finally:
                 app.display_alerts = True
-            return {"message": f"Sheet '{sheet}' deleted.", "sheets": [s.name for s in wb.sheets]}
+            return {
+                "message": f"Sheet '{sheet}' deleted.",
+                "sheets": [s.name for s in wb.sheets],
+            }
 
         if action == "rename":
             if sheet is None or new_name is None:
@@ -325,19 +405,61 @@ class ExcelHandler:
                 "sheets": [s.name for s in wb.sheets],
             }
 
+        if action == "activate":
+            if sheet is None:
+                raise ExcelError("Parameter 'sheet' is required for activate action.")
+            ws = self._get_sheet(wb, sheet)
+            ws.activate()
+            return {
+                "message": f"Sheet '{sheet}' is now active.",
+                "workbook": wb.name,
+                "active_sheet": ws.name,
+            }
+
+        # Row/column insert/delete actions
+        if action in ("insert_rows", "delete_rows", "insert_columns", "delete_columns"):
+            ws = self._get_sheet(wb, sheet)
+            if count < 1:
+                raise ExcelError("count must be >= 1.")
+
+            if action == "insert_rows":
+                rng_str = f"{position}:{position + count - 1}"
+                ws.range(rng_str).api.EntireRow.Insert()
+                return {"message": f"Inserted {count} row(s) at row {position}.", "sheet": ws.name}
+
+            if action == "delete_rows":
+                rng_str = f"{position}:{position + count - 1}"
+                ws.range(rng_str).api.EntireRow.Delete()
+                return {"message": f"Deleted {count} row(s) starting at row {position}.", "sheet": ws.name}
+
+            if action == "insert_columns":
+                rng = ws.range((1, position), (1, position + count - 1))
+                rng.api.EntireColumn.Insert()
+                return {"message": f"Inserted {count} column(s) at column {position}.", "sheet": ws.name}
+
+            if action == "delete_columns":
+                rng = ws.range((1, position), (1, position + count - 1))
+                rng.api.EntireColumn.Delete()
+                return {"message": f"Deleted {count} column(s) starting at column {position}.", "sheet": ws.name}
+
         raise ExcelError(
-            f"Unknown action '{action}'. Use: list, add, delete, rename, copy."
+            f"Unknown action '{action}'. Use: list, add, delete, rename, copy, "
+            "activate, insert_rows, delete_rows, insert_columns, delete_columns."
         )
+
+    # ------------------------------------------------------------------ #
+    #  Tool 6: find_replace
+    # ------------------------------------------------------------------ #
 
     def find_replace(
         self,
-        workbook: str,
-        sheet: str | None,
         find: str,
+        workbook: str | None = None,
+        sheet: str | None = None,
         replace: str | None = None,
         match_case: bool = False,
     ) -> dict:
-        wb = self._get_workbook(workbook)
+        wb = self._get_workbook_or_active(workbook)
         ws = self._get_sheet(wb, sheet)
 
         rng = ws.used_range
@@ -357,7 +479,6 @@ class ExcelHandler:
                 "replaced": bool(count),
             }
 
-        # Search only -- collect matching cells
         matches: list[dict] = []
         first = api.Find(What=find, MatchCase=match_case)
         if first is None:
@@ -365,24 +486,26 @@ class ExcelHandler:
 
         current = first
         while True:
-            matches.append(
-                {
-                    "cell": current.Address,
-                    "value": _serialize_value(current.Value),
-                    "sheet": ws.name,
-                }
-            )
+            matches.append({
+                "cell": current.Address,
+                "value": _serialize_value(current.Value),
+                "sheet": ws.name,
+            })
             current = api.FindNext(current)
             if current is None or current.Address == first.Address:
                 break
 
         return {"matches": matches, "count": len(matches)}
 
+    # ------------------------------------------------------------------ #
+    #  Tool 7: format_range
+    # ------------------------------------------------------------------ #
+
     def format_range(
         self,
-        workbook: str,
-        sheet: str | None,
         cell_range: str,
+        workbook: str | None = None,
+        sheet: str | None = None,
         bold: bool | None = None,
         italic: bool | None = None,
         underline: bool | None = None,
@@ -394,7 +517,7 @@ class ExcelHandler:
         wrap_text: bool | None = None,
         border: bool | None = None,
     ) -> dict:
-        wb = self._get_workbook(workbook)
+        wb = self._get_workbook_or_active(workbook)
         ws = self._get_sheet(wb, sheet)
         rng = ws.range(cell_range)
 
@@ -409,7 +532,6 @@ class ExcelHandler:
             applied.append(f"italic={italic}")
 
         if underline is not None:
-            # xlUnderlineStyleSingle = 2, xlUnderlineStyleNone = -4142
             rng.api.Font.Underline = 2 if underline else -4142
             applied.append(f"underline={underline}")
 
@@ -431,10 +553,10 @@ class ExcelHandler:
 
         if alignment is not None:
             align_map = {
-                "left": -4131,      # xlLeft
-                "center": -4108,    # xlCenter
-                "right": -4152,     # xlRight
-                "justify": -4130,   # xlJustify
+                "left": -4131,
+                "center": -4108,
+                "right": -4152,
+                "justify": -4130,
             }
             xl_align = align_map.get(alignment.lower())
             if xl_align is None:
@@ -450,11 +572,10 @@ class ExcelHandler:
             applied.append(f"wrap_text={wrap_text}")
 
         if border is not None and border:
-            # Apply thin borders on all edges (xlThin = 2)
-            for edge in range(7, 13):  # xlEdgeLeft(7) through xlInsideHorizontal(12)
+            for edge in range(7, 13):
                 try:
-                    rng.api.Borders(edge).LineStyle = 1  # xlContinuous
-                    rng.api.Borders(edge).Weight = 2  # xlThin
+                    rng.api.Borders(edge).LineStyle = 1
+                    rng.api.Borders(edge).Weight = 2
                 except Exception:
                     pass
             applied.append("border=True")
@@ -465,100 +586,9 @@ class ExcelHandler:
             "applied": applied,
         }
 
-    def save_workbook(
-        self,
-        workbook: str,
-        filepath: str | None = None,
-    ) -> dict:
-        wb = self._get_workbook(workbook)
-
-        if filepath:
-            wb.save(filepath)
-            return {"message": f"Workbook saved as '{filepath}'."}
-
-        wb.save()
-        return {"message": f"Workbook '{wb.name}' saved to '{wb.fullname}'."}
-
     # ------------------------------------------------------------------ #
-    #  Active Excel tools (xlwings-exclusive capabilities)
+    #  Tool 8: run_macro
     # ------------------------------------------------------------------ #
-
-    def get_active_workbook(self) -> dict:
-        app = self._get_app()
-        wb = app.books.active
-        if wb is None:
-            raise ExcelError("No active workbook found.")
-
-        ws = wb.sheets.active
-        info: dict[str, Any] = {
-            "name": wb.name,
-            "path": wb.fullname,
-            "sheets": [s.name for s in wb.sheets],
-            "active_sheet": ws.name,
-        }
-
-        # Include current selection info
-        try:
-            sel = app.selection
-            if sel is not None:
-                info["selection"] = {
-                    "address": sel.address,
-                    "sheet": sel.sheet.name,
-                }
-        except Exception:
-            pass
-
-        return info
-
-    def read_selection(self) -> dict:
-        app = self._get_app()
-        sel = app.selection
-        if sel is None:
-            raise ExcelError("No cells are currently selected in Excel.")
-
-        raw = sel.value
-        if raw is None:
-            return {
-                "data": [],
-                "range": sel.address,
-                "sheet": sel.sheet.name,
-                "workbook": sel.sheet.book.name,
-                "rows": 0,
-                "columns": 0,
-            }
-
-        # Normalise to 2D list
-        if not isinstance(raw, list):
-            data = [[raw]]
-        elif raw and not isinstance(raw[0], list):
-            data = [raw]
-        else:
-            data = raw
-
-        data = [_serialize_row(row) for row in data]
-
-        return {
-            "data": data,
-            "range": sel.address,
-            "sheet": sel.sheet.name,
-            "workbook": sel.sheet.book.name,
-            "rows": len(data),
-            "columns": len(data[0]) if data else 0,
-        }
-
-    def activate_sheet(
-        self,
-        workbook: str,
-        sheet: str,
-    ) -> dict:
-        wb = self._get_workbook(workbook)
-        ws = self._get_sheet(wb, sheet)
-        ws.activate()
-        return {
-            "message": f"Sheet '{sheet}' is now active.",
-            "workbook": wb.name,
-            "active_sheet": ws.name,
-        }
 
     def run_macro(
         self,
@@ -568,7 +598,6 @@ class ExcelHandler:
     ) -> dict:
         app = self._get_app()
 
-        # Build the fully-qualified macro name if workbook is specified
         if workbook:
             wb = self._get_workbook(workbook)
             qualified = f"'{wb.name}'!{macro_name}"
@@ -587,81 +616,3 @@ class ExcelHandler:
             "message": f"Macro '{macro_name}' executed successfully.",
             "return_value": _serialize_value(result),
         }
-
-    def close_workbook(
-        self,
-        workbook: str,
-        save: bool = False,
-    ) -> dict:
-        wb = self._get_workbook(workbook)
-        name = wb.name
-        if save:
-            wb.save()
-        wb.close()
-        return {"message": f"Workbook '{name}' closed (save={save})."}
-
-    def recalculate(self, workbook: str | None = None) -> dict:
-        app = self._get_app()
-        if workbook:
-            wb = self._get_workbook(workbook)
-            wb.app.calculate()
-            return {"message": f"Workbook '{wb.name}' recalculated."}
-        app.calculate()
-        return {"message": "All open workbooks recalculated."}
-
-    # ------------------------------------------------------------------ #
-    #  Structure manipulation
-    # ------------------------------------------------------------------ #
-
-    def insert_delete_cells(
-        self,
-        workbook: str,
-        action: str,
-        sheet: str | None = None,
-        position: int = 1,
-        count: int = 1,
-        target: str = "row",
-    ) -> dict:
-        wb = self._get_workbook(workbook)
-        ws = self._get_sheet(wb, sheet)
-
-        if target not in ("row", "column"):
-            raise ExcelError("target must be 'row' or 'column'.")
-        if count < 1:
-            raise ExcelError("count must be >= 1.")
-
-        if action == "insert":
-            if target == "row":
-                rng_str = f"{position}:{position + count - 1}"
-                ws.range(rng_str).api.EntireRow.Insert()
-                return {
-                    "message": f"Inserted {count} row(s) at row {position}.",
-                    "sheet": ws.name,
-                }
-            else:
-                rng = ws.range((1, position), (1, position + count - 1))
-                rng.api.EntireColumn.Insert()
-                return {
-                    "message": f"Inserted {count} column(s) at column {position}.",
-                    "sheet": ws.name,
-                }
-
-        if action == "delete":
-            if target == "row":
-                rng_str = f"{position}:{position + count - 1}"
-                ws.range(rng_str).api.EntireRow.Delete()
-                return {
-                    "message": f"Deleted {count} row(s) starting at row {position}.",
-                    "sheet": ws.name,
-                }
-            else:
-                rng = ws.range((1, position), (1, position + count - 1))
-                rng.api.EntireColumn.Delete()
-                return {
-                    "message": f"Deleted {count} column(s) starting at column {position}.",
-                    "sheet": ws.name,
-                }
-
-        raise ExcelError(
-            f"Unknown action '{action}'. Use: insert, delete."
-        )
