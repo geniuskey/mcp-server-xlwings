@@ -1,0 +1,47 @@
+{
+  "manifest_version": "0.4",
+  "name": "mcp-server-xlwings",
+  "display_name": "Excel via xlwings",
+  "version": "0.4.1",
+  "description": "Excel automation via xlwings COM. DRM-protected files, live sessions, VBA macros. Windows only.",
+  "author": {
+    "name": "Euiyun"
+  },
+  "icon": "icon.png",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/geniuskey/mcp-server-xlwings"
+  },
+  "homepage": "https://geniuskey.github.io/mcp-server-xlwings/",
+  "documentation": "https://geniuskey.github.io/mcp-server-xlwings/guide/getting-started",
+  "support": "https://github.com/geniuskey/mcp-server-xlwings/issues",
+  "keywords": ["excel", "xlwings", "com", "drm", "automation", "windows"],
+  "server": {
+    "type": "uv",
+    "entry_point": "src/mcp_server_xlwings/server.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": ["run", "--directory", "${__dirname}", "mcp-server-xlwings"]
+    }
+  },
+  "compatibility": {
+    "platforms": ["win32"],
+    "runtimes": {
+      "python": ">=3.10"
+    }
+  },
+  "tools": [
+    { "name": "get_active_workbook", "description": "Get active workbook info, sheets, and current selection" },
+    { "name": "manage_workbooks", "description": "List, open, save, close, or recalculate workbooks" },
+    { "name": "read_data", "description": "Read a range with merge_info, header_row, and sheet=* batch read" },
+    { "name": "write_data", "description": "Write a 2D array or a single-cell formula" },
+    { "name": "manage_sheets", "description": "List, add, delete, rename, copy sheets. Insert/delete rows and columns" },
+    { "name": "find_replace", "description": "Search for text, optionally replace it" },
+    { "name": "format_range", "description": "Apply formatting (bold, italic, color, borders, alignment, etc.)" },
+    { "name": "run_macro", "description": "Execute a VBA macro and get its return value" },
+    { "name": "get_formulas", "description": "Get all formulas in a range with optional calculated values" },
+    { "name": "get_cell_styles", "description": "Get formatting/style info for cells in a range" },
+    { "name": "get_objects", "description": "List charts, images, and shapes on a sheet" }
+  ]
+}
