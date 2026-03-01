@@ -16,8 +16,4 @@ jobs:
 
       - run: uv build
 
-      - uses: astral-sh/setup-uv@v4
-        with:
-          enable-cache: false
-
       - run: uv publish --trusted-publishing always

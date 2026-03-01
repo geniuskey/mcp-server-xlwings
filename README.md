@@ -203,3 +203,5 @@ The agent calls `manage_sheets(action="insert_rows", position=5, count=3)`.
 ## License
 
 MIT
+
+<!-- mcp-name: io.github.geniuskey/mcp-server-xlwings -->
