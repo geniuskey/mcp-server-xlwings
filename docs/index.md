@@ -1,5 +1,7 @@
 ---
 layout: home
+title: mcp-server-xlwings — Excel Automation for AI Agents
+titleTemplate: false
 
 hero:
   name: mcp-server-xlwings

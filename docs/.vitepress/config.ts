@@ -17,9 +17,22 @@ export default defineConfig({
         href: "/mcp-server-xlwings/favicon.svg",
       },
     ],
+    ["meta", { name: "author", content: "Euiyun Lab" }],
+    ["meta", { property: "og:type", content: "website" }],
+    ["meta", { property: "og:site_name", content: "mcp-server-xlwings" }],
     [
       "meta",
-      { property: "og:title", content: "mcp-server-xlwings" },
+      {
+        property: "og:url",
+        content: "https://geniuskey.github.io/mcp-server-xlwings/",
+      },
+    ],
+    [
+      "meta",
+      {
+        property: "og:title",
+        content: "mcp-server-xlwings — Excel Automation for AI Agents",
+      },
     ],
     [
       "meta",
@@ -101,6 +114,7 @@ export default defineConfig({
     ],
     footer: {
       message: "Released under the MIT License.",
+      copyright: 'by <a href="https://euiyun.com">Euiyun Lab</a>',
     },
     search: {
       provider: "local",
